@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?android:attr/colorBackground">
+
+    <!-- PDF Content Area -->
+    <FrameLayout
+        android:id="@+id/contentArea"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="@color/pdfDisplayBackground"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/statusText"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <ImageView
+            android:id="@+id/pdfPageView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="fitCenter"
+            android:background="@color/pdfPageBackground" />
+
+        <ScrollView
+            android:id="@+id/textScrollView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:padding="16dp"
+            android:background="@color/pdfPageBackground">
+
+            <TextView
+                android:id="@+id/pageTextView"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="16sp"
+                android:textColor="@color/textPrimary"
+                android:lineSpacingMultiplier="1.3" />
+        </ScrollView>
+    </FrameLayout>
+
+    <!-- Status text (small, above control bar) -->
+    <TextView
+        android:id="@+id/statusText"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="No PDF loaded"
+        android:textColor="@color/textSecondary"
+        android:textSize="12sp"
+        android:gravity="center"
+        android:paddingVertical="4dp"
+        android:background="@color/controlPanelBackground"
+        app:layout_constraintBottom_toTopOf="@id/controlBar"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- Bottom Control Bar -->
+    <LinearLayout
+        android:id="@+id/controlBar"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="12dp"
+        android:background="@color/controlPanelBackground"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <!-- Upload/Pick PDF button -->
+        <ImageButton
+            android:id="@+id/pickBtn"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/circle_button_bg"
+            android:src="@drawable/ic_upload"
+            android:scaleType="center"
+            android:contentDescription="Pick PDF" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <!-- Play/Pause button -->
+        <ImageButton
+            android:id="@+id/playPauseBtn"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/circle_button_bg"
+            android:src="@drawable/ic_play"
+            android:scaleType="center"
+            android:contentDescription="Play/Pause" />
+
+        <View
+            android:layout_width="16dp"
+            android:layout_height="0dp" />
+
+        <!-- Previous page button -->
+        <ImageButton
+            android:id="@+id/prevBtn"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/circle_button_bg"
+            android:src="@drawable/ic_prev"
+            android:scaleType="center"
+            android:contentDescription="Previous page" />
+
+        <View
+            android:layout_width="8dp"
+            android:layout_height="0dp" />
+
+        <!-- Page indicator -->
+        <TextView
+            android:id="@+id/pageIndicator"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="0/0"
+            android:textColor="@color/textPrimary"
+            android:textSize="14sp"
+            android:minWidth="48dp"
+            android:gravity="center" />
+
+        <View
+            android:layout_width="8dp"
+            android:layout_height="0dp" />
+
+        <!-- Next page button -->
+        <ImageButton
+            android:id="@+id/nextBtn"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/circle_button_bg"
+            android:src="@drawable/ic_next"
+            android:scaleType="center"
+            android:contentDescription="Next page" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <!-- Settings button -->
+        <ImageButton
+            android:id="@+id/settingsBtn"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/circle_button_bg"
+            android:src="@drawable/ic_settings"
+            android:scaleType="center"
+            android:contentDescription="Settings" />
+
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

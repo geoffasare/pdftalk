@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- PDF Document -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M30,24 L30,84 L66,84 L66,42 L48,24 Z"
+        android:strokeWidth="0"/>
+
+    <!-- Document fold -->
+    <path
+        android:fillColor="#B3E5FC"
+        android:pathData="M48,24 L48,42 L66,42 Z"
+        android:strokeWidth="0"/>
+
+    <!-- PDF text lines -->
+    <path
+        android:fillColor="#1976D2"
+        android:pathData="M36,52 L54,52"
+        android:strokeWidth="3"
+        android:strokeColor="#1976D2"
+        android:strokeLineCap="round"/>
+    <path
+        android:fillColor="#1976D2"
+        android:pathData="M36,62 L54,62"
+        android:strokeWidth="3"
+        android:strokeColor="#1976D2"
+        android:strokeLineCap="round"/>
+    <path
+        android:fillColor="#1976D2"
+        android:pathData="M36,72 L48,72"
+        android:strokeWidth="3"
+        android:strokeColor="#1976D2"
+        android:strokeLineCap="round"/>
+
+    <!-- Sound waves -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M70,48 Q76,54 70,60"
+        android:strokeWidth="3"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"/>
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M76,42 Q86,54 76,66"
+        android:strokeWidth="3"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"/>
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M82,36 Q96,54 82,72"
+        android:strokeWidth="3"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"/>
+</vector>

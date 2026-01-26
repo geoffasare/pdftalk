@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- 5-dot grid pattern (like dice 5) -->
+    <!-- Top left -->
+    <path
+        android:fillColor="@color/buttonIcon"
+        android:pathData="M7,7 m-2,0 a2,2 0 1,1 4,0 a2,2 0 1,1 -4,0"/>
+    <!-- Top right -->
+    <path
+        android:fillColor="@color/buttonIcon"
+        android:pathData="M17,7 m-2,0 a2,2 0 1,1 4,0 a2,2 0 1,1 -4,0"/>
+    <!-- Center -->
+    <path
+        android:fillColor="@color/buttonIcon"
+        android:pathData="M12,12 m-2,0 a2,2 0 1,1 4,0 a2,2 0 1,1 -4,0"/>
+    <!-- Bottom left -->
+    <path
+        android:fillColor="@color/buttonIcon"
+        android:pathData="M7,17 m-2,0 a2,2 0 1,1 4,0 a2,2 0 1,1 -4,0"/>
+    <!-- Bottom right -->
+    <path
+        android:fillColor="@color/buttonIcon"
+        android:pathData="M17,17 m-2,0 a2,2 0 1,1 4,0 a2,2 0 1,1 -4,0"/>
+</vector>

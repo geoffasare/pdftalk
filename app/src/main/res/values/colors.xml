@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Primary colors (blue theme) -->
+    <color name="colorPrimary">#1976D2</color>
+    <color name="colorPrimaryVariant">#1565C0</color>
+    <color name="colorOnPrimary">#FFFFFF</color>
+
+    <!-- Secondary colors -->
+    <color name="colorSecondary">#03A9F4</color>
+    <color name="colorSecondaryVariant">#0288D1</color>
+    <color name="colorOnSecondary">#000000</color>
+
+    <!-- Background colors -->
+    <color name="colorBackground">#FFFFFF</color>
+    <color name="colorOnBackground">#000000</color>
+
+    <!-- Surface colors -->
+    <color name="colorSurface">#FFFFFF</color>
+    <color name="colorOnSurface">#000000</color>
+
+    <!-- Custom app colors -->
+    <color name="pdfDisplayBackground">#F5F5F5</color>
+    <color name="pdfPageBackground">#FFFFFF</color>
+    <color name="controlPanelBackground">#F5F5F5</color>
+    <color name="textPrimary">#333333</color>
+    <color name="textSecondary">#666666</color>
+    <color name="highlightColor">#FFEB3B</color>
+
+    <!-- Button colors (light mode) -->
+    <color name="buttonBackground">#FFFFFF</color>
+    <color name="buttonBorder">#333333</color>
+    <color name="buttonIcon">#333333</color>
+
+    <!-- Bottom sheet colors (light mode) -->
+    <color name="bottomSheetBackground">#FFFFFF</color>
+    <color name="handleColor">#CCCCCC</color>
+    <color name="spinnerBackground">#F5F5F5</color>
+</resources>
