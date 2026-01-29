@@ -39,3 +39,18 @@ keystore.properties
 
 # Log files
 *.log
+
+# Claude Code local settings
+.claude/
+
+# IDE
+.vscode/
+*.swp
+*.swo
+
+# OS files
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp

@@ -54,9 +54,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var currentPdfUri: Uri? = null
     private var cachedPdfFile: File? = null
 
-    // Settings state
-    private var currentRateProgress = 50
-    private var currentPitchProgress = 50
+    // Settings state (33 progress = 1.0x speed/pitch)
+    private var currentRateProgress = 33
+    private var currentPitchProgress = 33
     private var currentVoiceIndex = 0
 
     private val sectionsDir: File
@@ -66,8 +66,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         get() = ContextCompat.getColor(this, R.color.highlightColor)
 
     companion object {
-        private const val PREFS_NAME = "theme_prefs"
+        private const val PREFS_NAME = "pdftalk_prefs"
         private const val KEY_DARK_MODE = "dark_mode"
+        private const val KEY_CURRENT_SECTION = "current_section"
+        private const val KEY_HAS_PDF = "has_pdf"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -103,7 +105,38 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         nextBtn.setOnClickListener { nextSection() }
         settingsBtn.setOnClickListener { showSettingsBottomSheet() }
 
+        // Restore PDF state after theme change
+        restorePdfState()
+
         updateUI()
+    }
+
+    private fun restorePdfState() {
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        val hasPdf = prefs.getBoolean(KEY_HAS_PDF, false)
+
+        if (hasPdf) {
+            val cacheFile = File(cacheDir, "current.pdf")
+            if (cacheFile.exists() && sectionsDir.exists()) {
+                cachedPdfFile = cacheFile
+                sectionFiles = sectionsDir.listFiles()?.filter { it.extension == "txt" }?.sortedBy { it.name } ?: emptyList()
+
+                if (sectionFiles.isNotEmpty()) {
+                    currentSectionIndex = prefs.getInt(KEY_CURRENT_SECTION, 0).coerceIn(0, sectionFiles.size - 1)
+                    setupPdfRenderer()
+                    renderCurrentPage()
+                    statusText.text = "Loaded ${sectionFiles.size} pages"
+                }
+            }
+        }
+    }
+
+    private fun savePdfState() {
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        prefs.edit()
+            .putBoolean(KEY_HAS_PDF, sectionFiles.isNotEmpty())
+            .putInt(KEY_CURRENT_SECTION, currentSectionIndex)
+            .apply()
     }
 
     private fun showSettingsBottomSheet() {
@@ -184,12 +217,43 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         if (status == TextToSpeech.SUCCESS) {
             val available = tts?.voices
             if (available != null) {
-                val list = available.filter { !it.isNetworkConnectionRequired }.sortedBy { it.name }
-                voicesList = list
-                voiceDisplayNames = list.map { getHumanReadableVoiceName(it) }
+                // Filter to only English voices, offline, and deduplicate by quality
+                val englishVoices = available.filter { voice ->
+                    !voice.isNetworkConnectionRequired &&
+                    voice.locale.language == "en"
+                }
 
-                // Set default voice to en-us-x-iom-local
-                val defaultIndex = list.indexOfFirst { it.name == "en-us-x-iom-local" }
+                // Select one good voice per locale variant
+                val selectedVoices = mutableListOf<Voice>()
+                val seenLocales = mutableSetOf<String>()
+
+                // Prefer voices with these patterns (standard quality)
+                val preferredPatterns = listOf("iom", "iob", "iol")
+
+                for (pattern in preferredPatterns) {
+                    for (voice in englishVoices) {
+                        val localeKey = voice.locale.toString()
+                        if (!seenLocales.contains(localeKey) && voice.name.contains(pattern, ignoreCase = true)) {
+                            selectedVoices.add(voice)
+                            seenLocales.add(localeKey)
+                        }
+                    }
+                }
+
+                // If we didn't find preferred voices, add any English voice per locale
+                for (voice in englishVoices) {
+                    val localeKey = voice.locale.toString()
+                    if (!seenLocales.contains(localeKey)) {
+                        selectedVoices.add(voice)
+                        seenLocales.add(localeKey)
+                    }
+                }
+
+                voicesList = selectedVoices.sortedBy { it.locale.displayCountry }
+                voiceDisplayNames = voicesList.map { getHumanReadableVoiceName(it) }
+
+                // Set default voice to en-us
+                val defaultIndex = voicesList.indexOfFirst { it.locale.country == "US" }
                 if (defaultIndex >= 0) {
                     currentVoiceIndex = defaultIndex
                 }
@@ -236,50 +300,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun getHumanReadableVoiceName(voice: Voice): String {
-        val name = voice.name
         val locale = voice.locale
-
-        // Get language display name
-        val language = locale.displayLanguage
         val country = locale.displayCountry
 
-        // Parse voice variant from name
-        val variant = when {
-            name.contains("iom", ignoreCase = true) -> "Standard"
-            name.contains("iob", ignoreCase = true) -> "Warm"
-            name.contains("iol", ignoreCase = true) -> "Clear"
-            name.contains("iog", ignoreCase = true) -> "Gentle"
-            name.contains("studio", ignoreCase = true) -> "Studio"
-            name.contains("wavenet", ignoreCase = true) -> "WaveNet"
-            name.contains("neural", ignoreCase = true) -> "Neural"
-            name.contains("local", ignoreCase = true) -> "Local"
-            else -> ""
+        return if (country.isNotEmpty()) {
+            "English ($country)"
+        } else {
+            "English"
         }
-
-        // Determine gender hint from name
-        val gender = when {
-            name.contains("-female", ignoreCase = true) ||
-            name.endsWith("f") ||
-            name.contains("-a-", ignoreCase = true) -> "Female"
-            name.contains("-male", ignoreCase = true) ||
-            name.endsWith("m") ||
-            name.contains("-b-", ignoreCase = true) -> "Male"
-            else -> ""
-        }
-
-        val parts = mutableListOf<String>()
-        parts.add(language)
-        if (country.isNotEmpty() && country != language) {
-            parts.add("($country)")
-        }
-        if (variant.isNotEmpty()) {
-            parts.add("- $variant")
-        }
-        if (gender.isNotEmpty()) {
-            parts.add(gender)
-        }
-
-        return parts.joinToString(" ")
     }
 
     private fun highlightText(start: Int, end: Int) {
@@ -366,6 +394,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         currentSectionIndex = 0
                         runOnUiThread {
                             statusText.text = "Loaded ${sectionFiles.size} pages"
+                            savePdfState()
                             updateUI()
                             renderCurrentPage()
                         }
@@ -550,6 +579,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun toggleTheme() {
+        // Save PDF state before theme change causes activity recreation
+        savePdfState()
+
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         val isDarkMode = prefs.getBoolean(KEY_DARK_MODE, true)
         val newMode = !isDarkMode

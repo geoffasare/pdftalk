@@ -1,10 +1,19 @@
 apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
 
+// Load signing config from keystore.properties (local) or environment variables (CI)
 def keystorePropertiesFile = rootProject.file("keystore.properties")
 def keystoreProperties = new Properties()
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
+// Helper to get signing property from file or environment
+def getSigningProperty = { propName, envName ->
+    if (keystorePropertiesFile.exists() && keystoreProperties[propName]) {
+        return keystoreProperties[propName]
+    }
+    return System.getenv(envName)
 }
 
 android {
@@ -24,11 +33,12 @@ android {
 
     signingConfigs {
         release {
-            if (keystorePropertiesFile.exists()) {
-                keyAlias keystoreProperties['keyAlias']
-                keyPassword keystoreProperties['keyPassword']
-                storeFile file(keystoreProperties['storeFile'])
-                storePassword keystoreProperties['storePassword']
+            def storeFilePath = getSigningProperty('storeFile', 'KEYSTORE_FILE')
+            if (storeFilePath) {
+                keyAlias getSigningProperty('keyAlias', 'KEY_ALIAS')
+                keyPassword getSigningProperty('keyPassword', 'KEY_PASSWORD')
+                storeFile file(storeFilePath)
+                storePassword getSigningProperty('storePassword', 'KEYSTORE_PASSWORD')
             }
         }
     }
@@ -38,7 +48,8 @@ android {
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            if (keystorePropertiesFile.exists()) {
+            def storeFilePath = getSigningProperty('storeFile', 'KEYSTORE_FILE')
+            if (storeFilePath) {
                 signingConfig signingConfigs.release
             }
         }
