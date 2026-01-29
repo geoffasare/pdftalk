@@ -454,10 +454,18 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
             result.append(currentLine)
 
+            // Check if current line is a bullet point or list item
+            val isBulletPoint = currentLine.matches(Regex("^[-•*▪▸►]\\s.*"))
+            val isNumberedList = currentLine.matches(Regex("^\\d+[.):]\\s.*"))
+            val isLetteredList = currentLine.matches(Regex("^[a-zA-Z][.):]\\s.*"))
+            val isListItem = isBulletPoint || isNumberedList || isLetteredList
+
             // Decide whether to add newline or space after this line
             val shouldPreserveNewline = when {
                 // Next line is empty (paragraph break coming)
                 nextLine.isEmpty() -> true
+                // Current line is a list item (preserve newline after it)
+                isListItem -> true
                 // Current line ends with sentence-ending punctuation
                 currentLine.endsWith(".") || currentLine.endsWith("!") ||
                 currentLine.endsWith("?") || currentLine.endsWith(":") -> true
