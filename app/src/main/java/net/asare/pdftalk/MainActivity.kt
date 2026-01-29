@@ -1,16 +1,22 @@
 package net.asare.pdftalk
 
+import android.Manifest
 import android.app.Activity
+import android.content.BroadcastReceiver
+import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.content.ServiceConnection
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.IBinder
 import android.os.ParcelFileDescriptor
-import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
-import android.speech.tts.Voice
 import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.BackgroundColorSpan
@@ -18,16 +24,17 @@ import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.text.PDFTextStripper
 import java.io.File
 import java.io.FileOutputStream
-import java.util.*
 
-class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
+class MainActivity : AppCompatActivity() {
     private lateinit var pickBtn: ImageButton
     private lateinit var playPauseBtn: ImageButton
     private lateinit var prevBtn: ImageButton
@@ -39,9 +46,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private lateinit var pageTextView: TextView
     private lateinit var textScrollView: ScrollView
 
-    private var tts: TextToSpeech? = null
-    private var voicesList: List<Voice> = emptyList()
-    private var voiceDisplayNames: List<String> = emptyList()
+    private var playbackService: PlaybackService? = null
+    private var serviceBound = false
 
     private var sectionFiles: List<File> = emptyList()
     private var currentSectionIndex = 0
@@ -54,11 +60,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var currentPdfUri: Uri? = null
     private var cachedPdfFile: File? = null
 
-    // Settings state (33 progress = 1.0x speed/pitch)
-    private var currentRateProgress = 33
-    private var currentPitchProgress = 33
-    private var currentVoiceIndex = 0
-
     private val sectionsDir: File
         get() = File(filesDir, "sections")
 
@@ -70,6 +71,64 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         private const val KEY_DARK_MODE = "dark_mode"
         private const val KEY_CURRENT_SECTION = "current_section"
         private const val KEY_HAS_PDF = "has_pdf"
+        private const val NOTIFICATION_PERMISSION_REQUEST = 100
+    }
+
+    private val serviceConnection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+            val binder = service as PlaybackService.PlaybackBinder
+            playbackService = binder.getService()
+            serviceBound = true
+
+            // Sync service state with activity
+            if (sectionFiles.isNotEmpty()) {
+                playbackService?.setSectionFiles(sectionFiles)
+                playbackService?.setCurrentSection(currentSectionIndex)
+            }
+
+            // Get current state from service
+            syncStateFromService()
+        }
+
+        override fun onServiceDisconnected(name: ComponentName?) {
+            playbackService = null
+            serviceBound = false
+        }
+    }
+
+    private val stateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                PlaybackService.BROADCAST_STATE_CHANGED -> {
+                    isPlaying = intent.getBooleanExtra(PlaybackService.EXTRA_IS_PLAYING, false)
+                    isPaused = intent.getBooleanExtra(PlaybackService.EXTRA_IS_PAUSED, false)
+                    val newIndex = intent.getIntExtra(PlaybackService.EXTRA_CURRENT_INDEX, 0)
+                    val ttsReady = intent.getBooleanExtra(PlaybackService.EXTRA_TTS_READY, false)
+
+                    if (newIndex != currentSectionIndex && sectionFiles.isNotEmpty()) {
+                        currentSectionIndex = newIndex
+                        renderCurrentPage()
+                        savePdfState()
+                    }
+
+                    updatePlayPauseButton()
+                    updateUI()
+
+                    if (ttsReady && !isPlaying) {
+                        statusText.text = "TTS ready"
+                    } else if (isPlaying && !isPaused) {
+                        statusText.text = "Playing..."
+                    } else if (isPaused) {
+                        statusText.text = "Paused"
+                    }
+                }
+                PlaybackService.BROADCAST_RANGE_UPDATE -> {
+                    val start = intent.getIntExtra(PlaybackService.EXTRA_RANGE_START, 0)
+                    val end = intent.getIntExtra(PlaybackService.EXTRA_RANGE_END, 0)
+                    highlightText(start, end)
+                }
+            }
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -77,7 +136,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         // Apply saved theme preference (default to dark mode)
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-        val isDarkMode = prefs.getBoolean(KEY_DARK_MODE, true) // Default to dark
+        val isDarkMode = prefs.getBoolean(KEY_DARK_MODE, true)
         AppCompatDelegate.setDefaultNightMode(
             if (isDarkMode) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_NO
         )
@@ -97,18 +156,81 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         pageTextView = findViewById(R.id.pageTextView)
         textScrollView = findViewById(R.id.textScrollView)
 
-        tts = TextToSpeech(this, this)
-
         pickBtn.setOnClickListener { openPdfPicker() }
         playPauseBtn.setOnClickListener { togglePlayPause() }
         prevBtn.setOnClickListener { prevSection() }
         nextBtn.setOnClickListener { nextSection() }
         settingsBtn.setOnClickListener { showSettingsBottomSheet() }
 
+        // Request notification permission on Android 13+
+        requestNotificationPermission()
+
+        // Start and bind to service
+        val serviceIntent = Intent(this, PlaybackService::class.java)
+        startService(serviceIntent)
+        bindService(serviceIntent, serviceConnection, Context.BIND_AUTO_CREATE)
+
         // Restore PDF state after theme change
         restorePdfState()
 
         updateUI()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        val filter = IntentFilter().apply {
+            addAction(PlaybackService.BROADCAST_STATE_CHANGED)
+            addAction(PlaybackService.BROADCAST_RANGE_UPDATE)
+        }
+        LocalBroadcastManager.getInstance(this).registerReceiver(stateReceiver, filter)
+
+        // Sync state when returning to activity
+        syncStateFromService()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        LocalBroadcastManager.getInstance(this).unregisterReceiver(stateReceiver)
+    }
+
+    private fun syncStateFromService() {
+        playbackService?.let { service ->
+            isPlaying = service.isPlaying()
+            isPaused = service.isPaused()
+
+            if (service.getTotalSections() > 0) {
+                val serviceIndex = service.getCurrentSection()
+                if (serviceIndex != currentSectionIndex && serviceIndex < sectionFiles.size) {
+                    currentSectionIndex = serviceIndex
+                    renderCurrentPage()
+                }
+            }
+
+            currentText = service.getCurrentText()
+            if (currentText.isNotEmpty()) {
+                pageTextView.text = currentText
+            }
+
+            updatePlayPauseButton()
+            updateUI()
+
+            if (service.isTtsReady() && !isPlaying) {
+                statusText.text = if (sectionFiles.isNotEmpty()) "Loaded ${sectionFiles.size} pages" else "TTS ready"
+            }
+        }
+    }
+
+    private fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                    NOTIFICATION_PERMISSION_REQUEST
+                )
+            }
+        }
     }
 
     private fun restorePdfState() {
@@ -126,6 +248,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     setupPdfRenderer()
                     renderCurrentPage()
                     statusText.text = "Loaded ${sectionFiles.size} pages"
+
+                    // Sync with service
+                    playbackService?.setSectionFiles(sectionFiles)
+                    playbackService?.setCurrentSection(currentSectionIndex)
                 }
             }
         }
@@ -151,49 +277,47 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val pitchValue = view.findViewById<TextView>(R.id.sheetPitchValue)
         val themeToggle = view.findViewById<Button>(R.id.sheetThemeToggle)
 
-        // Setup voice spinner
-        if (voiceDisplayNames.isNotEmpty()) {
-            val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, voiceDisplayNames)
-            adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-            voiceSpinner.adapter = adapter
-            voiceSpinner.setSelection(currentVoiceIndex)
+        val service = playbackService
+        if (service != null) {
+            val voiceDisplayNames = service.getVoiceDisplayNames()
+            if (voiceDisplayNames.isNotEmpty()) {
+                val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, voiceDisplayNames)
+                adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+                voiceSpinner.adapter = adapter
+                voiceSpinner.setSelection(service.getCurrentVoiceIndex())
 
-            voiceSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-                override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                    currentVoiceIndex = position
-                    if (isPlaying) applyTtsSettings()
+                voiceSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                    override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                        service.setVoiceIndex(position)
+                    }
+                    override fun onNothingSelected(parent: AdapterView<*>?) {}
                 }
-                override fun onNothingSelected(parent: AdapterView<*>?) {}
             }
+
+            rateSeek.progress = service.getRateProgress()
+            pitchSeek.progress = service.getPitchProgress()
+            updateRatePitchDisplay(rateValue, pitchValue, service.getRateProgress(), service.getPitchProgress())
+
+            rateSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    updateRatePitchDisplay(rateValue, pitchValue, progress, pitchSeek.progress)
+                }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                    service.setRateProgress(rateSeek.progress)
+                }
+            })
+
+            pitchSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    updateRatePitchDisplay(rateValue, pitchValue, rateSeek.progress, progress)
+                }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                    service.setPitchProgress(pitchSeek.progress)
+                }
+            })
         }
-
-        // Setup rate seekbar
-        rateSeek.progress = currentRateProgress
-        updateRatePitchDisplay(rateValue, pitchValue)
-
-        rateSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                currentRateProgress = progress
-                updateRatePitchDisplay(rateValue, pitchValue)
-            }
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {
-                if (isPlaying) applyTtsSettings()
-            }
-        })
-
-        // Setup pitch seekbar
-        pitchSeek.progress = currentPitchProgress
-        pitchSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                currentPitchProgress = progress
-                updateRatePitchDisplay(rateValue, pitchValue)
-            }
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {
-                if (isPlaying) applyTtsSettings()
-            }
-        })
 
         // Setup theme toggle
         val isDarkMode = AppCompatDelegate.getDefaultNightMode() == AppCompatDelegate.MODE_NIGHT_YES
@@ -206,108 +330,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         bottomSheet.show()
     }
 
-    private fun updateRatePitchDisplay(rateValue: TextView, pitchValue: TextView) {
-        val rate = 0.5f + (currentRateProgress / 100f) * 1.5f
-        val pitch = 0.5f + (currentPitchProgress / 100f) * 1.5f
+    private fun updateRatePitchDisplay(rateValue: TextView, pitchValue: TextView, rateProgress: Int, pitchProgress: Int) {
+        val rate = 0.5f + (rateProgress / 100f) * 1.5f
+        val pitch = 0.5f + (pitchProgress / 100f) * 1.5f
         rateValue.text = String.format("%.1fx", rate)
         pitchValue.text = String.format("%.1fx", pitch)
-    }
-
-    override fun onInit(status: Int) {
-        if (status == TextToSpeech.SUCCESS) {
-            val available = tts?.voices
-            if (available != null) {
-                // Filter to only English voices, offline, and deduplicate by quality
-                val englishVoices = available.filter { voice ->
-                    !voice.isNetworkConnectionRequired &&
-                    voice.locale.language == "en"
-                }
-
-                // Select one good voice per locale variant
-                val selectedVoices = mutableListOf<Voice>()
-                val seenLocales = mutableSetOf<String>()
-
-                // Prefer voices with these patterns (standard quality)
-                val preferredPatterns = listOf("iom", "iob", "iol")
-
-                for (pattern in preferredPatterns) {
-                    for (voice in englishVoices) {
-                        val localeKey = voice.locale.toString()
-                        if (!seenLocales.contains(localeKey) && voice.name.contains(pattern, ignoreCase = true)) {
-                            selectedVoices.add(voice)
-                            seenLocales.add(localeKey)
-                        }
-                    }
-                }
-
-                // If we didn't find preferred voices, add any English voice per locale
-                for (voice in englishVoices) {
-                    val localeKey = voice.locale.toString()
-                    if (!seenLocales.contains(localeKey)) {
-                        selectedVoices.add(voice)
-                        seenLocales.add(localeKey)
-                    }
-                }
-
-                voicesList = selectedVoices.sortedBy { it.locale.displayCountry }
-                voiceDisplayNames = voicesList.map { getHumanReadableVoiceName(it) }
-
-                // Set default voice to en-us
-                val defaultIndex = voicesList.indexOfFirst { it.locale.country == "US" }
-                if (defaultIndex >= 0) {
-                    currentVoiceIndex = defaultIndex
-                }
-            }
-
-            tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                override fun onStart(utteranceId: String?) {}
-
-                override fun onDone(utteranceId: String?) {
-                    runOnUiThread {
-                        if (isPlaying && !isPaused) {
-                            if (currentSectionIndex < sectionFiles.size - 1) {
-                                currentSectionIndex++
-                                updateUI()
-                                renderCurrentPage()
-                                playCurrent()
-                            } else {
-                                stopPlayback()
-                                statusText.text = "Finished all sections"
-                            }
-                        }
-                    }
-                }
-
-                @Deprecated("Deprecated in API 21")
-                override fun onError(utteranceId: String?) {
-                    runOnUiThread {
-                        statusText.text = "TTS error"
-                        stopPlayback()
-                    }
-                }
-
-                override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
-                    runOnUiThread {
-                        highlightText(start, end)
-                    }
-                }
-            })
-
-            statusText.text = "TTS ready"
-        } else {
-            statusText.text = "TTS init failed"
-        }
-    }
-
-    private fun getHumanReadableVoiceName(voice: Voice): String {
-        val locale = voice.locale
-        val country = locale.displayCountry
-
-        return if (country.isNotEmpty()) {
-            "English ($country)"
-        } else {
-            "English"
-        }
     }
 
     private fun highlightText(start: Int, end: Int) {
@@ -398,6 +425,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                             savePdfState()
                             updateUI()
                             renderCurrentPage()
+
+                            // Sync with service
+                            playbackService?.setSectionFiles(sectionFiles)
+                            playbackService?.setCurrentSection(currentSectionIndex)
                         }
                     } catch (e: Exception) {
                         e.printStackTrace()
@@ -427,16 +458,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         pdfFileDescriptor = null
     }
 
-    /**
-     * Normalizes PDF text for smoother TTS reading.
-     * Joins mid-sentence line breaks with spaces while preserving:
-     * - Paragraph breaks (multiple newlines)
-     * - Headings (short lines)
-     * - Bullet points and numbered lists
-     * - Lines ending with sentence-ending punctuation
-     */
     private fun normalizeTextForTts(text: String): String {
-        // Normalize line endings
         val normalized = text.replace("\r\n", "\n").replace("\r", "\n")
 
         val lines = normalized.split("\n")
@@ -447,43 +469,30 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             val nextLine = lines.getOrNull(i + 1)?.trim() ?: ""
 
             if (currentLine.isEmpty()) {
-                // Empty line = paragraph break
                 result.append("\n\n")
                 continue
             }
 
             result.append(currentLine)
 
-            // Check if current line is a bullet point or list item
             val isBulletPoint = currentLine.matches(Regex("^[-•*▪▸►]\\s.*"))
             val isNumberedList = currentLine.matches(Regex("^\\d+[.):]\\s.*"))
             val isLetteredList = currentLine.matches(Regex("^[a-zA-Z][.):]\\s.*"))
             val isListItem = isBulletPoint || isNumberedList || isLetteredList
 
-            // Decide whether to add newline or space after this line
             val shouldPreserveNewline = when {
-                // Next line is empty (paragraph break coming)
                 nextLine.isEmpty() -> true
-                // Current line is a list item (preserve newline after it)
                 isListItem -> true
-                // Current line ends with sentence-ending punctuation
                 currentLine.endsWith(".") || currentLine.endsWith("!") ||
                 currentLine.endsWith("?") || currentLine.endsWith(":") -> true
-                // Current line is short (likely a heading) - less than 50 chars and doesn't end with comma
                 currentLine.length < 50 && !currentLine.endsWith(",") -> true
-                // Next line starts with bullet point or list marker
                 nextLine.matches(Regex("^[-•*▪▸►]\\s.*")) -> true
-                // Next line starts with a number followed by period/parenthesis (numbered list)
                 nextLine.matches(Regex("^\\d+[.):]\\s.*")) -> true
-                // Next line starts with letter followed by period/parenthesis (lettered list)
                 nextLine.matches(Regex("^[a-zA-Z][.):]\\s.*")) -> true
-                // Current line ends with hyphen (word continuation)
                 currentLine.endsWith("-") -> {
-                    // Remove the hyphen and join directly
                     result.deleteCharAt(result.length - 1)
                     false
                 }
-                // Otherwise, it's likely a mid-sentence line break
                 else -> false
             }
 
@@ -496,7 +505,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             }
         }
 
-        // Clean up multiple spaces and newlines
         return result.toString()
             .replace(Regex(" {2,}"), " ")
             .replace(Regex("\n{3,}"), "\n\n")
@@ -537,33 +545,22 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             return
         }
 
-        if (isPlaying) {
-            if (isPaused) {
-                isPaused = false
-                playCurrent()
-                playPauseBtn.setImageResource(R.drawable.ic_pause)
-                statusText.text = "Playing..."
-            } else {
-                isPaused = true
-                tts?.stop()
-                playPauseBtn.setImageResource(R.drawable.ic_play)
-                statusText.text = "Paused"
-            }
-        } else {
-            isPlaying = true
-            isPaused = false
-            applyTtsSettings()
-            playCurrent()
+        playbackService?.togglePlayPause()
+    }
+
+    private fun updatePlayPauseButton() {
+        if (isPlaying && !isPaused) {
             playPauseBtn.setImageResource(R.drawable.ic_pause)
-            statusText.text = "Playing..."
+        } else {
+            playPauseBtn.setImageResource(R.drawable.ic_play)
         }
     }
 
     private fun stopPlayback() {
-        tts?.stop()
+        playbackService?.stopPlayback()
         isPlaying = false
         isPaused = false
-        playPauseBtn.setImageResource(R.drawable.ic_play)
+        updatePlayPauseButton()
         statusText.text = if (sectionFiles.isNotEmpty()) "Stopped" else "No PDF loaded"
 
         // Clear highlighting
@@ -574,68 +571,29 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun prevSection() {
         if (sectionFiles.isEmpty()) return
-        val wasPlaying = isPlaying && !isPaused
-        tts?.stop()
 
+        playbackService?.prevSection()
+
+        // Update locally as well for immediate feedback
         if (currentSectionIndex > 0) {
             currentSectionIndex--
-        }
-        updateUI()
-        renderCurrentPage()
-
-        if (wasPlaying) {
-            playCurrent()
+            updateUI()
+            renderCurrentPage()
+            savePdfState()
         }
     }
 
     private fun nextSection() {
         if (sectionFiles.isEmpty()) return
-        val wasPlaying = isPlaying && !isPaused
-        tts?.stop()
 
+        playbackService?.nextSection()
+
+        // Update locally as well for immediate feedback
         if (currentSectionIndex < sectionFiles.size - 1) {
             currentSectionIndex++
-        }
-        updateUI()
-        renderCurrentPage()
-
-        if (wasPlaying) {
-            playCurrent()
-        }
-    }
-
-    private fun playCurrent() {
-        if (currentSectionIndex >= sectionFiles.size) return
-
-        val file = sectionFiles[currentSectionIndex]
-        currentText = file.readText()
-
-        if (currentText.isBlank()) {
-            if (currentSectionIndex < sectionFiles.size - 1) {
-                currentSectionIndex++
-                updateUI()
-                renderCurrentPage()
-                playCurrent()
-            }
-            return
-        }
-
-        pageTextView.text = currentText
-        tts?.speak(currentText, TextToSpeech.QUEUE_FLUSH, null, "section_$currentSectionIndex")
-    }
-
-    private fun applyTtsSettings() {
-        val rate = 0.5f + (currentRateProgress / 100f) * 1.5f
-        val pitch = 0.5f + (currentPitchProgress / 100f) * 1.5f
-        tts?.setPitch(pitch)
-        tts?.setSpeechRate(rate)
-
-        voicesList.getOrNull(currentVoiceIndex)?.let { v ->
-            try {
-                tts?.voice = v
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
+            updateUI()
+            renderCurrentPage()
+            savePdfState()
         }
     }
 
@@ -671,7 +629,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     override fun onDestroy() {
-        tts?.shutdown()
+        if (serviceBound) {
+            unbindService(serviceConnection)
+            serviceBound = false
+        }
         closePdfRenderer()
         super.onDestroy()
     }
