@@ -11,7 +11,7 @@ An Android app that converts PDF documents to speech using Android's TextToSpeec
 
 ## Download
 
-Get the latest APK from [Releases](../../releases).
+Get the latest APK from [Releases](https://github.com/geoffasare/pdftalk/releases).
 
 ## Building from Source
 
