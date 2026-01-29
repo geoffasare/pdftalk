@@ -429,26 +429,70 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     /**
      * Normalizes PDF text for smoother TTS reading.
-     * Replaces single newlines (mid-sentence line breaks) with spaces,
-     * while preserving paragraph breaks (multiple newlines).
+     * Joins mid-sentence line breaks with spaces while preserving:
+     * - Paragraph breaks (multiple newlines)
+     * - Headings (short lines)
+     * - Bullet points and numbered lists
+     * - Lines ending with sentence-ending punctuation
      */
     private fun normalizeTextForTts(text: String): String {
-        // First, normalize different line ending styles
-        var normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+        // Normalize line endings
+        val normalized = text.replace("\r\n", "\n").replace("\r", "\n")
 
-        // Preserve paragraph breaks by temporarily replacing them
-        normalized = normalized.replace(Regex("\n{2,}"), "<<PARAGRAPH>>")
+        val lines = normalized.split("\n")
+        val result = StringBuilder()
 
-        // Replace single newlines with spaces (these are mid-sentence line breaks)
-        normalized = normalized.replace("\n", " ")
+        for (i in lines.indices) {
+            val currentLine = lines[i].trim()
+            val nextLine = lines.getOrNull(i + 1)?.trim() ?: ""
 
-        // Restore paragraph breaks as single newlines
-        normalized = normalized.replace("<<PARAGRAPH>>", "\n\n")
+            if (currentLine.isEmpty()) {
+                // Empty line = paragraph break
+                result.append("\n\n")
+                continue
+            }
 
-        // Clean up multiple spaces
-        normalized = normalized.replace(Regex(" {2,}"), " ")
+            result.append(currentLine)
 
-        return normalized.trim()
+            // Decide whether to add newline or space after this line
+            val shouldPreserveNewline = when {
+                // Next line is empty (paragraph break coming)
+                nextLine.isEmpty() -> true
+                // Current line ends with sentence-ending punctuation
+                currentLine.endsWith(".") || currentLine.endsWith("!") ||
+                currentLine.endsWith("?") || currentLine.endsWith(":") -> true
+                // Current line is short (likely a heading) - less than 50 chars and doesn't end with comma
+                currentLine.length < 50 && !currentLine.endsWith(",") -> true
+                // Next line starts with bullet point or list marker
+                nextLine.matches(Regex("^[-•*▪▸►]\\s.*")) -> true
+                // Next line starts with a number followed by period/parenthesis (numbered list)
+                nextLine.matches(Regex("^\\d+[.):]\\s.*")) -> true
+                // Next line starts with letter followed by period/parenthesis (lettered list)
+                nextLine.matches(Regex("^[a-zA-Z][.):]\\s.*")) -> true
+                // Current line ends with hyphen (word continuation)
+                currentLine.endsWith("-") -> {
+                    // Remove the hyphen and join directly
+                    result.deleteCharAt(result.length - 1)
+                    false
+                }
+                // Otherwise, it's likely a mid-sentence line break
+                else -> false
+            }
+
+            if (i < lines.size - 1) {
+                if (shouldPreserveNewline) {
+                    result.append("\n")
+                } else {
+                    result.append(" ")
+                }
+            }
+        }
+
+        // Clean up multiple spaces and newlines
+        return result.toString()
+            .replace(Regex(" {2,}"), " ")
+            .replace(Regex("\n{3,}"), "\n\n")
+            .trim()
     }
 
     private fun renderCurrentPage() {
