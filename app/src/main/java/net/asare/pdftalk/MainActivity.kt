@@ -371,10 +371,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                                     startPage = page
                                     endPage = page
                                 }
-                                val text = stripper.getText(doc).trim()
-                                if (text.isNotEmpty()) {
+                                val rawText = stripper.getText(doc).trim()
+                                if (rawText.isNotEmpty()) {
+                                    val normalizedText = normalizeTextForTts(rawText)
                                     val file = File(sectionsDir, "section_${String.format("%04d", page)}.txt")
-                                    file.writeText(text)
+                                    file.writeText(normalizedText)
                                     files.add(file)
                                 }
 
@@ -424,6 +425,30 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         pdfFileDescriptor?.close()
         pdfRenderer = null
         pdfFileDescriptor = null
+    }
+
+    /**
+     * Normalizes PDF text for smoother TTS reading.
+     * Replaces single newlines (mid-sentence line breaks) with spaces,
+     * while preserving paragraph breaks (multiple newlines).
+     */
+    private fun normalizeTextForTts(text: String): String {
+        // First, normalize different line ending styles
+        var normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+
+        // Preserve paragraph breaks by temporarily replacing them
+        normalized = normalized.replace(Regex("\n{2,}"), "<<PARAGRAPH>>")
+
+        // Replace single newlines with spaces (these are mid-sentence line breaks)
+        normalized = normalized.replace("\n", " ")
+
+        // Restore paragraph breaks as single newlines
+        normalized = normalized.replace("<<PARAGRAPH>>", "\n\n")
+
+        // Clean up multiple spaces
+        normalized = normalized.replace(Regex(" {2,}"), " ")
+
+        return normalized.trim()
     }
 
     private fun renderCurrentPage() {
