@@ -26,6 +26,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
@@ -142,6 +144,20 @@ class MainActivity : AppCompatActivity() {
         )
 
         setContentView(R.layout.activity_main)
+
+        // Handle system navigation bar insets
+        val controlBar = findViewById<View>(R.id.controlBar)
+        val originalPaddingBottom = controlBar.paddingBottom
+        ViewCompat.setOnApplyWindowInsetsListener(controlBar) { view, windowInsets ->
+            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.setPadding(
+                view.paddingLeft,
+                view.paddingTop,
+                view.paddingRight,
+                originalPaddingBottom + insets.bottom
+            )
+            windowInsets
+        }
 
         PDFBoxResourceLoader.init(applicationContext)
 
