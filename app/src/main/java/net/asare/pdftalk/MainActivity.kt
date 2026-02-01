@@ -145,7 +145,19 @@ class MainActivity : AppCompatActivity() {
 
         setContentView(R.layout.activity_main)
 
-        // Handle system navigation bar insets
+        // Handle system bar insets
+        val contentArea = findViewById<View>(R.id.contentArea)
+        ViewCompat.setOnApplyWindowInsetsListener(contentArea) { view, windowInsets ->
+            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.setPadding(
+                view.paddingLeft,
+                insets.top,
+                view.paddingRight,
+                view.paddingBottom
+            )
+            windowInsets
+        }
+
         val controlBar = findViewById<View>(R.id.controlBar)
         val originalPaddingBottom = controlBar.paddingBottom
         ViewCompat.setOnApplyWindowInsetsListener(controlBar) { view, windowInsets ->
