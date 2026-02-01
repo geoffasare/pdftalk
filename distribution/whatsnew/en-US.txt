@@ -1,4 +1,8 @@
-Bug Fixes
+What's New in v1.1.6
 
-• Fixed navigation bar overlap on Samsung One UI 7 devices
-• Added edge-to-edge display support for Android 15
+• Background playback with media controls
+• Improved PDF text extraction for smoother reading
+• Better text formatting (preserves headings and lists)
+• Fixed control bar overlap issues
+• Fixed navigation bar overlap on Samsung One UI 7
+• Edge-to-edge display support for Android 15
