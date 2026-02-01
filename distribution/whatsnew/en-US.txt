@@ -1,3 +1,4 @@
 Bug Fixes
 
-• Fixed control bar being obscured by the system navigation bar on devices with gesture navigation
+• Removed app title bar that was covering content
+• Fixed content area to properly respect status bar
