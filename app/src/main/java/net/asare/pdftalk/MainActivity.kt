@@ -27,6 +27,7 @@ import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.google.android.material.bottomsheet.BottomSheetDialog
@@ -144,6 +145,9 @@ class MainActivity : AppCompatActivity() {
         )
 
         setContentView(R.layout.activity_main)
+
+        // Enable edge-to-edge display (required for Samsung One UI 7 / Android 15)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
 
         // Handle system bar insets
         val contentArea = findViewById<View>(R.id.contentArea)

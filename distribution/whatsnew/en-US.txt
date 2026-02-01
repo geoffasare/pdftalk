@@ -1,4 +1,4 @@
 Bug Fixes
 
-• Removed app title bar that was covering content
-• Fixed content area to properly respect status bar
+• Fixed navigation bar overlap on Samsung One UI 7 devices
+• Added edge-to-edge display support for Android 15
