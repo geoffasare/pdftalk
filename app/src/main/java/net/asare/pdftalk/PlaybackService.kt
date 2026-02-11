@@ -55,7 +55,7 @@ class PlaybackService : Service(), TextToSpeech.OnInitListener {
     private var isPaused = false
     private var currentText = ""
     private var ttsReady = false
-    private var lastSpokenRangeStart = 0
+    private var lastSpokenRangeEnd = 0
     private var playbackCharOffset = 0
 
     private var voicesList: List<Voice> = emptyList()
@@ -147,7 +147,7 @@ class PlaybackService : Service(), TextToSpeech.OnInitListener {
                 }
 
                 override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
-                    lastSpokenRangeStart = start
+                    lastSpokenRangeEnd = end
                     broadcastRangeUpdate(playbackCharOffset + start, playbackCharOffset + end)
                 }
             })
@@ -330,7 +330,7 @@ class PlaybackService : Service(), TextToSpeech.OnInitListener {
         if (index in 0 until sectionFiles.size) {
             currentSectionIndex = index
             playbackCharOffset = 0
-            lastSpokenRangeStart = 0
+            lastSpokenRangeEnd = 0
             broadcastStateChange()
         }
     }
@@ -412,7 +412,7 @@ class PlaybackService : Service(), TextToSpeech.OnInitListener {
         if (!isPlaying) return
 
         isPaused = true
-        playbackCharOffset += lastSpokenRangeStart
+        playbackCharOffset += lastSpokenRangeEnd
         tts?.stop()
         updateNotification()
         broadcastStateChange()
@@ -433,7 +433,7 @@ class PlaybackService : Service(), TextToSpeech.OnInitListener {
         isPlaying = false
         isPaused = false
         playbackCharOffset = 0
-        lastSpokenRangeStart = 0
+        lastSpokenRangeEnd = 0
         updateNotification()
         broadcastStateChange()
     }
@@ -480,7 +480,7 @@ class PlaybackService : Service(), TextToSpeech.OnInitListener {
 
     private fun playCurrent() {
         playbackCharOffset = 0
-        lastSpokenRangeStart = 0
+        lastSpokenRangeEnd = 0
         playFromOffset()
     }
 
@@ -506,7 +506,7 @@ class PlaybackService : Service(), TextToSpeech.OnInitListener {
             currentText
         }
 
-        lastSpokenRangeStart = 0
+        lastSpokenRangeEnd = 0
         tts?.speak(textToSpeak, TextToSpeech.QUEUE_FLUSH, null, "section_$currentSectionIndex")
         updateNotification()
     }
