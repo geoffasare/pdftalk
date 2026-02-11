@@ -55,6 +55,8 @@ class PlaybackService : Service(), TextToSpeech.OnInitListener {
     private var isPaused = false
     private var currentText = ""
     private var ttsReady = false
+    private var lastSpokenRangeStart = 0
+    private var playbackCharOffset = 0
 
     private var voicesList: List<Voice> = emptyList()
     private var currentVoiceIndex = 0
@@ -145,7 +147,8 @@ class PlaybackService : Service(), TextToSpeech.OnInitListener {
                 }
 
                 override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
-                    broadcastRangeUpdate(start, end)
+                    lastSpokenRangeStart = start
+                    broadcastRangeUpdate(playbackCharOffset + start, playbackCharOffset + end)
                 }
             })
 
@@ -326,6 +329,8 @@ class PlaybackService : Service(), TextToSpeech.OnInitListener {
     fun setCurrentSection(index: Int) {
         if (index in 0 until sectionFiles.size) {
             currentSectionIndex = index
+            playbackCharOffset = 0
+            lastSpokenRangeStart = 0
             broadcastStateChange()
         }
     }
@@ -397,7 +402,7 @@ class PlaybackService : Service(), TextToSpeech.OnInitListener {
             startPlayback()
         } else if (isPaused) {
             isPaused = false
-            playCurrent()
+            playFromOffset()
             updateNotification()
             broadcastStateChange()
         }
@@ -407,6 +412,7 @@ class PlaybackService : Service(), TextToSpeech.OnInitListener {
         if (!isPlaying) return
 
         isPaused = true
+        playbackCharOffset += lastSpokenRangeStart
         tts?.stop()
         updateNotification()
         broadcastStateChange()
@@ -426,6 +432,8 @@ class PlaybackService : Service(), TextToSpeech.OnInitListener {
         tts?.stop()
         isPlaying = false
         isPaused = false
+        playbackCharOffset = 0
+        lastSpokenRangeStart = 0
         updateNotification()
         broadcastStateChange()
     }
@@ -471,6 +479,12 @@ class PlaybackService : Service(), TextToSpeech.OnInitListener {
     }
 
     private fun playCurrent() {
+        playbackCharOffset = 0
+        lastSpokenRangeStart = 0
+        playFromOffset()
+    }
+
+    private fun playFromOffset() {
         if (currentSectionIndex >= sectionFiles.size) return
 
         val file = sectionFiles[currentSectionIndex]
@@ -485,7 +499,15 @@ class PlaybackService : Service(), TextToSpeech.OnInitListener {
             return
         }
 
-        tts?.speak(currentText, TextToSpeech.QUEUE_FLUSH, null, "section_$currentSectionIndex")
+        val textToSpeak = if (playbackCharOffset > 0 && playbackCharOffset < currentText.length) {
+            currentText.substring(playbackCharOffset)
+        } else {
+            playbackCharOffset = 0
+            currentText
+        }
+
+        lastSpokenRangeStart = 0
+        tts?.speak(textToSpeak, TextToSpeech.QUEUE_FLUSH, null, "section_$currentSectionIndex")
         updateNotification()
     }
 
