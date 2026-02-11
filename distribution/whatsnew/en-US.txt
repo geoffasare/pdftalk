@@ -1,4 +1,3 @@
 Bug Fixes
 
-• Fixed navigation bar overlap on Samsung One UI 7 devices
-• Added edge-to-edge display support for Android 15
+• Pause and resume now continues from where the reader stopped
