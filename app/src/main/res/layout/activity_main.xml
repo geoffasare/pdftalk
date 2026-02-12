@@ -40,7 +40,7 @@
         </ScrollView>
     </FrameLayout>
 
-    <!-- Status text (small, above control bar) -->
+    <!-- Status text (small, above seek bar) -->
     <TextView
         android:id="@+id/statusText"
         android:layout_width="0dp"
@@ -50,6 +50,19 @@
         android:textSize="12sp"
         android:gravity="center"
         android:paddingVertical="4dp"
+        android:background="@color/controlPanelBackground"
+        app:layout_constraintBottom_toTopOf="@id/seekBar"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- SeekBar for scrubbing through page text -->
+    <SeekBar
+        android:id="@+id/seekBar"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:max="0"
+        android:progress="0"
+        android:paddingHorizontal="16dp"
         android:background="@color/controlPanelBackground"
         app:layout_constraintBottom_toTopOf="@id/controlBar"
         app:layout_constraintStart_toStartOf="parent"

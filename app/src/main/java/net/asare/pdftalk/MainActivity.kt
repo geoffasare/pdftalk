@@ -48,6 +48,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var pdfPageView: ImageView
     private lateinit var pageTextView: TextView
     private lateinit var textScrollView: ScrollView
+    private lateinit var seekBar: SeekBar
+    private var isUserSeeking = false
 
     private var playbackService: PlaybackService? = null
     private var serviceBound = false
@@ -107,6 +109,10 @@ class MainActivity : AppCompatActivity() {
                     isPaused = intent.getBooleanExtra(PlaybackService.EXTRA_IS_PAUSED, false)
                     val newIndex = intent.getIntExtra(PlaybackService.EXTRA_CURRENT_INDEX, 0)
                     val ttsReady = intent.getBooleanExtra(PlaybackService.EXTRA_TTS_READY, false)
+                    val textLength = intent.getIntExtra(PlaybackService.EXTRA_TEXT_LENGTH, 0)
+                    if (textLength > 0) {
+                        seekBar.max = textLength
+                    }
 
                     if (newIndex != currentSectionIndex && sectionFiles.isNotEmpty()) {
                         currentSectionIndex = newIndex
@@ -129,6 +135,9 @@ class MainActivity : AppCompatActivity() {
                     val start = intent.getIntExtra(PlaybackService.EXTRA_RANGE_START, 0)
                     val end = intent.getIntExtra(PlaybackService.EXTRA_RANGE_END, 0)
                     highlightText(start, end)
+                    if (!isUserSeeking) {
+                        seekBar.progress = start
+                    }
                 }
             }
         }
@@ -187,6 +196,18 @@ class MainActivity : AppCompatActivity() {
         pdfPageView = findViewById(R.id.pdfPageView)
         pageTextView = findViewById(R.id.pageTextView)
         textScrollView = findViewById(R.id.textScrollView)
+        seekBar = findViewById(R.id.seekBar)
+
+        seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {}
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {
+                isUserSeeking = true
+            }
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                isUserSeeking = false
+                playbackService?.seekTo(seekBar?.progress ?: 0)
+            }
+        })
 
         pickBtn.setOnClickListener { openPdfPicker() }
         playPauseBtn.setOnClickListener { togglePlayPause() }
@@ -241,6 +262,8 @@ class MainActivity : AppCompatActivity() {
             currentText = service.getCurrentText()
             if (currentText.isNotEmpty()) {
                 pageTextView.text = currentText
+                seekBar.max = currentText.length
+                seekBar.progress = service.getPlaybackCharOffset()
             }
 
             updatePlayPauseButton()
@@ -568,6 +591,8 @@ class MainActivity : AppCompatActivity() {
         if (currentSectionIndex < sectionFiles.size) {
             currentText = sectionFiles[currentSectionIndex].readText()
             pageTextView.text = currentText
+            seekBar.max = currentText.length
+            seekBar.progress = 0
         }
     }
 
@@ -594,6 +619,7 @@ class MainActivity : AppCompatActivity() {
         isPaused = false
         updatePlayPauseButton()
         statusText.text = if (sectionFiles.isNotEmpty()) "Stopped" else "No PDF loaded"
+        seekBar.progress = 0
 
         // Clear highlighting
         if (currentText.isNotEmpty()) {
@@ -605,6 +631,7 @@ class MainActivity : AppCompatActivity() {
         if (sectionFiles.isEmpty()) return
 
         playbackService?.prevSection()
+        seekBar.progress = 0
 
         // Update locally as well for immediate feedback
         if (currentSectionIndex > 0) {
@@ -619,6 +646,7 @@ class MainActivity : AppCompatActivity() {
         if (sectionFiles.isEmpty()) return
 
         playbackService?.nextSection()
+        seekBar.progress = 0
 
         // Update locally as well for immediate feedback
         if (currentSectionIndex < sectionFiles.size - 1) {

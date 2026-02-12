@@ -43,6 +43,7 @@ class PlaybackService : Service(), TextToSpeech.OnInitListener {
         const val EXTRA_RANGE_START = "range_start"
         const val EXTRA_RANGE_END = "range_end"
         const val EXTRA_TTS_READY = "tts_ready"
+        const val EXTRA_TEXT_LENGTH = "text_length"
     }
 
     private val binder = PlaybackBinder()
@@ -307,6 +308,7 @@ class PlaybackService : Service(), TextToSpeech.OnInitListener {
             putExtra(EXTRA_CURRENT_INDEX, currentSectionIndex)
             putExtra(EXTRA_TOTAL_SECTIONS, sectionFiles.size)
             putExtra(EXTRA_TTS_READY, ttsReady)
+            putExtra(EXTRA_TEXT_LENGTH, currentText.length)
         }
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
     }
@@ -347,6 +349,19 @@ class PlaybackService : Service(), TextToSpeech.OnInitListener {
 
     fun getCurrentText(): String = currentText
 
+    fun getPlaybackCharOffset(): Int = playbackCharOffset
+
+    fun seekTo(charPosition: Int) {
+        val wasPlaying = isPlaying && !isPaused
+        tts?.stop()
+        playbackCharOffset = charPosition.coerceIn(0, currentText.length)
+        lastSpokenRangeEnd = 0
+        if (wasPlaying) {
+            playFromOffset()
+        }
+        broadcastStateChange()
+    }
+
     fun getVoicesList(): List<Voice> = voicesList
 
     fun getVoiceDisplayNames(): List<String> = voicesList.map { getHumanReadableVoiceName(it) }
@@ -384,7 +399,12 @@ class PlaybackService : Service(), TextToSpeech.OnInitListener {
         isPlaying = true
         isPaused = false
         applyTtsSettings()
-        playCurrent()
+
+        if (playbackCharOffset > 0) {
+            playFromOffset()
+        } else {
+            playCurrent()
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(NOTIFICATION_ID, buildNotification(), android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
