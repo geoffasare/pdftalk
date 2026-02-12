@@ -24,8 +24,8 @@ android {
         applicationId "net.asare.pdftalk"
         minSdkVersion 21
         targetSdkVersion 35
-        versionCode 12
-        versionName "1.1.8"
+        versionCode 13
+        versionName "1.1.9"
 
         // Enable multidex for large app support
         multiDexEnabled true
